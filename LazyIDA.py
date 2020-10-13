@@ -128,10 +128,12 @@ class menu_action_handler_t(idaapi.action_handler_t):
                 print("\n[+] Dump 0x%X - 0x%X (%u bytes) :" % (start, end, size))
                 if self.action == ACTION_CONVERT[0]:
                     # escaped string
-                    print('"%s"' % "".join("\\x%02X" % b for b in data))
+                    output = '"%s"' % "".join("\\x%02X" % b for b in data)
+                    print(output)
                 elif self.action == ACTION_CONVERT[1]:
                     # hex string
-                    print("".join("%02X" % b for b in data))
+                    output = "".join("%02X" % b for b in data)
+                    print(output)
                 elif self.action == ACTION_CONVERT[2]:
                     # C array
                     output = "unsigned char %s[%d] = {" % (name, size)
@@ -176,19 +178,24 @@ class menu_action_handler_t(idaapi.action_handler_t):
                     print(output.replace("0X", "0x"))
                 elif self.action == ACTION_CONVERT[6]:
                     # python list
-                    print("[%s]" % ", ".join("0x%02X" % b for b in data))
+                    output = "[%s]" % ", ".join("0x%02X" % b for b in data)
+                    print(output)
                 elif self.action == ACTION_CONVERT[7]:
                     # python list word
                     data += b"\x00"
-                    print("[%s]" % ", ".join("0x%04X" % u16(data[i:i+2]) for i in range(0, size, 2)))
+                    output = "[%s]" % ", ".join("0x%04X" % u16(data[i:i+2]) for i in range(0, size, 2))
+                    print(output)
                 elif self.action == ACTION_CONVERT[8]:
                     # python list dword
                     data += b"\x00" * 3
-                    print("[%s]" % ", ".join("0x%08X" % u32(data[i:i+4]) for i in range(0, size, 4)))
+                    output = "[%s]" % ", ".join("0x%08X" % u32(data[i:i+4]) for i in range(0, size, 4))
+                    print(output)
                 elif self.action == ACTION_CONVERT[9]:
                     # python list qword
                     data += b"\x00" * 7
-                    print("[%s]" %  ", ".join("%#018X" % u64(data[i:i+8]) for i in range(0, size, 8)).replace("0X", "0x"))
+                    output = "[%s]" %  ", ".join("%#018X" % u64(data[i:i+8]) for i in range(0, size, 8)).replace("0X", "0x")
+                    print(output)
+                copy_to_clip(output)
         elif self.action == ACTION_XORDATA:
             t0, t1, view = idaapi.twinpos_t(), idaapi.twinpos_t(), idaapi.get_current_viewer()
             if idaapi.read_selection(view, t0, t1):
@@ -203,11 +210,20 @@ class menu_action_handler_t(idaapi.action_handler_t):
             data = idc.get_bytes(start, end - start)
             if isinstance(data, str):  # python2 compatibility
                 data = bytearray(data)
+
+            p = idaapi.ask_buttons('Yes','No','Cancel',1,'Patch?')
+            if p == -1:
+            	return False
             x = idaapi.ask_long(0, "Xor with...")
             if x:
                 x &= 0xFF
                 print("\n[+] Xor 0x%X - 0x%X (%u bytes) with 0x%02X:" % (start, end, end - start, x))
-                print(repr("".join(chr(b ^ x) for b in data)))
+                xored = "".join(chr(b ^ x) for b in data)
+                print(repr(xored))
+                copy_to_clip(repr(xored))
+                if p == 1:
+                	idaapi.patch_bytes(start,bytes(xored))
+                	print("\n[+] Patch 0x%X - 0x%X (%u bytes) xored with 0x%02X success!" % (start, end, end - start, x))
         elif self.action == ACTION_FILLNOP:
             t0, t1, view = idaapi.twinpos_t(), idaapi.twinpos_t(), idaapi.get_current_viewer()
             if idaapi.read_selection(view, t0, t1):
@@ -411,7 +427,7 @@ class UI_Hook(idaapi.UI_Hooks):
                 idaapi.attach_action_to_popup(form, popup, ACTION_XORDATA, None)
                 idaapi.attach_action_to_popup(form, popup, ACTION_FILLNOP, None)
                 for action in ACTION_CONVERT:
-                    idaapi.attach_action_to_popup(form, popup, action, "Convert/")
+                    idaapi.attach_action_to_popup(form, popup, action, "Convert(Auto copy)/")
 
         if form_type == idaapi.BWN_DISASM and (ARCH, BITS) in [(idaapi.PLFM_386, 32),
                                                                (idaapi.PLFM_386, 64),
@@ -483,7 +499,7 @@ class LazyIDA_t(idaapi.plugin_t):
             idaapi.action_desc_t(ACTION_CONVERT[7], "Convert to python list (WORD)", menu_action_handler_t(ACTION_CONVERT[7]), None, None, 201),
             idaapi.action_desc_t(ACTION_CONVERT[8], "Convert to python list (DWORD)", menu_action_handler_t(ACTION_CONVERT[8]), None, None, 201),
             idaapi.action_desc_t(ACTION_CONVERT[9], "Convert to python list (QWORD)", menu_action_handler_t(ACTION_CONVERT[9]), None, None, 201),
-            idaapi.action_desc_t(ACTION_XORDATA, "Get xored data", menu_action_handler_t(ACTION_XORDATA), None, None, 9),
+            idaapi.action_desc_t(ACTION_XORDATA, "Get(or Patch) xored data", menu_action_handler_t(ACTION_XORDATA), None, None, 9),
             idaapi.action_desc_t(ACTION_FILLNOP, "Fill with NOPs", menu_action_handler_t(ACTION_FILLNOP), None, None, 9),
             idaapi.action_desc_t(ACTION_SCANVUL, "Scan format string vulnerabilities", menu_action_handler_t(ACTION_SCANVUL), None, None, 160),
         )
